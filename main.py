@@ -80,7 +80,7 @@ with no_ssl_verification():
     downloaded_count = 0
     for idx, photo in enumerate(api.photos.all.photos):
         if photo.id == 'AaHHQJN+jHexyB7jiQD5LYt+nx+4':
-            photo_date = photo.added_date  # проблемная фотка какая-то ассет дейт не извлекается
+            photo_date = photo.added_date  # weird photo, got asset_date extraction error
         else:
             photo_date = photo.asset_date
         folder = base_folder + str(photo_date.year) + '\\' + photo_date.strftime('%Y-%m-%d') + '\\'
