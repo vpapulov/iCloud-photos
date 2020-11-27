@@ -2,6 +2,7 @@ import contextlib
 import http.client
 import logging
 import sys
+import os
 
 import click
 import requests
@@ -10,7 +11,7 @@ from pprint import pprint
 from pyicloud import PyiCloudService
 from urllib3.exceptions import InsecureRequestWarning
 
-from config import ICLOUD_LOGIN
+from config import ICLOUD_LOGIN, STORE_FOLDER, DOWNLOAD_LIMIT
 
 # Handle certificate warnings by ignoring them
 old_merge_environment_settings = requests.Session.merge_environment_settings
@@ -67,9 +68,9 @@ def httpclient_logging_patch(level=logging.DEBUG):
 
 
 # Enable general debug logging
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
-httpclient_logging_patch()
+# httpclient_logging_patch()
 password = input('Password:')
 
 api = PyiCloudService(ICLOUD_LOGIN, password)
@@ -97,3 +98,37 @@ if api.requires_2sa:
 # This request will not fail, even if using intercepting proxies.
 with no_ssl_verification():
     pprint(api.account)
+
+    base_folder = STORE_FOLDER
+    downloaded_count = 0
+    for idx, photo in enumerate(api.photos.all.photos):
+        if photo.id == 'AaHHQJN+jHexyB7jiQD5LYt+nx+4':
+            photo_date = photo.added_date  # проблемная фотка какая-то ассет дейт не извлекается
+        else:
+            photo_date = photo.asset_date
+        folder = base_folder + str(photo_date.year) + '\\' + photo_date.strftime('%Y-%m-%d') + '\\'
+        if not os.path.isdir(folder):
+            os.makedirs(folder)
+        photo_ts = photo_date.timestamp()
+        filename = folder + photo.filename
+        if os.path.isfile(filename):
+            # file exists
+            if os.path.getsize(filename) == photo.size and os.path.getmtime(filename) == photo_ts:
+                continue
+            else:
+                name_and_ext = photo.filename.split('.')
+                filename = folder + name_and_ext[0] + '_' + photo_date.strftime('%H-%M-%S') \
+                           + '.' + name_and_ext[1] if len(name_and_ext) > 0 else ''
+                if os.path.isfile(filename):
+                    continue
+        url = photo.versions['original']['url']
+        print(f'#{downloaded_count + 1} ({idx + 1}) {filename}: {round(photo.size / 1024 / 1024, 1)}Mb')
+        response = requests.get(url, allow_redirects=True)
+        with open(filename, 'wb') as fo:
+            fo.write(response.content)
+        os.utime(filename, (photo_ts, photo_ts))
+        downloaded_count += 1
+        if downloaded_count >= DOWNLOAD_LIMIT:
+            print('limited ', downloaded_count)
+            break
+    print('done')
